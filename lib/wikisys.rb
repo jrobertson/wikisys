@@ -29,7 +29,7 @@ module Wikisys
     def page(title)
 
       r = @entries.find_by_title title   
-      @page = r ? r : make_page(title)
+      @page = r ? File.read(title + '.md') : make_page(title)
 
     end
     
@@ -61,5 +61,3 @@ module Wikisys
   end
 
 end
-
-

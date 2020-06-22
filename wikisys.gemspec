@@ -1,6 +1,6 @@
 Gem::Specification.new do |s|
   s.name = 'wikisys'
-  s.version = '0.1.0'
+  s.version = '0.1.1'
   s.summary = "A poor man's wiki."
   s.authors = ['James Robertson']
   s.files = Dir['lib/wikisys.rb']
