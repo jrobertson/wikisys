@@ -10,6 +10,7 @@ require 'martile'
 module Wikisys
 
   class Wiki
+    using ColouredText
     
     attr_accessor :title, :content, :tags
     attr_reader :to_xml
@@ -19,6 +20,8 @@ module Wikisys
       @filepath = filepath
       @page = ''
       @debug = debug
+      
+      @hc = HashCache.new(size:30)
 
       @entries = if entries.is_a? DxLite then
       
@@ -34,6 +37,18 @@ module Wikisys
 
       end
     
+    end
+    
+    def create_breadcrumb(filepath, links)
+  
+      doc = Rexle.new(read_file(filepath))
+      heading = doc.root.element('heading')
+      
+      menu = Rexle.new(HtmlCom::Menu.new(:breadcrumb, links).to_html)
+      
+      heading.insert_before menu.root
+      write_file filepath, doc.root.xml
+          
     end
     
 
@@ -93,6 +108,10 @@ module Wikisys
       
     end
     
+    def read_file(file='index.html')
+      @hc.read(file) { File.read(file) }
+    end
+    
     private
     
     def read_md(filename)
@@ -100,7 +119,7 @@ module Wikisys
       filepath = File.join(@filepath, 'md', filename)
       return unless File.exists? filepath
       
-      s = File.read(filepath).strip
+      s = read_file(filepath).strip
       
       # read the title
       title = s.lines.first.chomp.sub(/^# +/,'')
@@ -118,8 +137,7 @@ module Wikisys
         
       end
       
-    end                  
-
+    end   
     
     def build_xml(title, content, tags)
       
@@ -172,11 +190,19 @@ module Wikisys
     def write_xml(title, content)
       
       filepath = File.join(File.absolute_path(@filepath), 'xml', 
-                           title.gsub(/ +/,'_') + '.xml')
+                           title.downcase.gsub(/ +/,'_') + '.xml')
       FileUtils.mkdir_p File.dirname(filepath)      
-      File.write filepath, content
+      #File.write filepath, content
+      write_file filepath, content
       
     end          
+    
+    def write_file(filepath, content)
+      
+      puts 'writing file: ' + filepath.inspect if @debug
+      File.write filepath, content
+      @hc.write(filepath) { content }      
+    end
     
     def make_page(title, raw_tags=title.downcase.gsub(/['\.\(\)]/,''))
       
@@ -269,9 +295,29 @@ module Wikisys
         update_mw(pg.title, pg.tags)
                 
       end
+
+      @mw.save if @mw.lines.any?      
+      outline_filepath = File.join(@filepath, 'myoutline.txt')
+      
+      File.write outline_filepath, @mw.to_outline
+      
+      (h[:new] + h[:modified]).each do |filename|
+        
+        filepath = File.join(@filepath, 'xml',filename.sub(/\.md$/,'.xml'))
+        s = pg.read_file filepath
+        title = Rexle.new(s).root.text('heading')
+        puts 'about to search title: ' + title.inspect if @debug
+        found = @mw.search(title)
+        
+        next unless found
+        
+        links = found.breadcrumb.map {|x| [x, x.downcase.gsub(/ +/,'-') + '.html']}
+        pg.create_breadcrumb(filepath, links)
+        
+      end
       
       @entries.save
-      @mw.save if @mw.lines.any?
+
       
     end # /scan_md_files       
     
@@ -324,5 +370,10 @@ module Wikisys
       end                            
       
     end
+    
+    def view_file(file='index.html')
+      @hc.read(file) { File.read(file) }
+    end
+
   end
 end
