@@ -6,15 +6,15 @@ require 'dxlite'
 require 'dir-to-xml'
 require 'mindwords'
 require 'martile'
+require 'hashcache'
 
 module FileFetch
 
   def fetch_filepath(filename)
 
-    #lib = File.dirname(__FILE__)    
-    #File.join(lib,'..','stylesheet',filename)
-    lib = 'http://a0.jamesrobertson.me.uk/rorb/r/ruby/wikisys/stylesheet'
-    File.join(lib, filename)
+    lib = File.dirname(__FILE__)    
+    File.join(lib,'..','stylesheet',filename)
+
   end  
   
   def fetch_file(filename)
