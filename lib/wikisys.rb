@@ -7,9 +7,30 @@ require 'dir-to-xml'
 require 'mindwords'
 require 'martile'
 
+module FileFetch
+
+  def fetch_filepath(filename)
+
+    lib = File.dirname(__FILE__)    
+    File.join(lib,'..','stylesheet',filename)
+
+  end  
+  
+  def fetch_file(filename)
+
+    filepath = fetch_filepath filename
+    read filepath
+  end  
+
+  def read(s)
+    RXFHelper.read(s).first
+  end
+end
+
 module Wikisys
 
-  class Wiki
+  class Wiki    
+    include FileFetch
     using ColouredText
     
     attr_accessor :title, :content, :tags
@@ -49,8 +70,7 @@ module Wikisys
       heading.insert_before menu.root
       write_file filepath, doc.root.xml
           
-    end
-    
+    end    
 
     def page(title)
 
@@ -110,6 +130,24 @@ module Wikisys
     
     def read_file(file='index.html')
       @hc.read(file) { File.read(file) }
+    end
+    
+    def to_css()
+      fetch_file 'pg.css'
+    end
+    
+    def write_html(filename)
+
+      FileUtils.mkdir_p File.join(@filepath, 'html')
+      
+      xml = read_file File.join(@filepath, 'xml', filename)
+      puts 'about to fetch_file' if @debug
+      xsl = fetch_file 'pg.xsl'
+      puts 'xsl: ' + xsl.inspect if @debug
+      
+      html_file = File.join(@filepath, 'html', filename.sub(/\.xml$/,'.html'))
+      write_file(html_file, transform(xsl, xml))
+
     end
     
     private
@@ -182,10 +220,21 @@ module Wikisys
 
       end
             
-      "<article>\n  %s\n  %s\n  %s\n</article>" % [heading, body, tags]
+      "<article id='%s'>\n  %s\n  %s\n  %s\n</article>" % \
+          [title.downcase.gsub(/ +/,'-'), heading, body, tags]
       
       
     end
+    
+    
+    def transform(xsl, xml)
+
+      doc   = Nokogiri::XML(xml)
+      xslt  = Nokogiri::XSLT(xsl)
+
+      xslt.transform(doc)      
+      
+    end    
     
     def write_xml(title, content)
       
@@ -279,7 +328,7 @@ module Wikisys
       h = dir.activity
       puts 'h: ' + h.inspect if @debug
       
-      pg = Wiki.new @filepath, entries: @entries
+      pg = Wiki.new @filepath, entries: @entries, debug: @debug
                     
       
       h[:new].each do |filename|
@@ -303,16 +352,24 @@ module Wikisys
       
       (h[:new] + h[:modified]).each do |filename|
         
-        filepath = File.join(@filepath, 'xml',filename.sub(/\.md$/,'.xml'))
+        xml_file = filename.sub(/\.md$/,'.xml')
+        filepath = File.join(@filepath, 'xml', xml_file)
         s = pg.read_file filepath
         title = Rexle.new(s).root.text('heading')
         puts 'about to search title: ' + title.inspect if @debug
         found = @mw.search(title)
         
-        next unless found
+        if found then
         
-        links = found.breadcrumb.map {|x| [x, x.downcase.gsub(/ +/,'-') + '.html']}
-        pg.create_breadcrumb(filepath, links)
+          links = found.breadcrumb.map do |x| 
+            [x, x.downcase.gsub(/ +/,'-') + '.html']
+          end
+                    
+          pg.create_breadcrumb(filepath, links)
+          
+        end
+        
+        pg.write_html xml_file
         
       end
       
