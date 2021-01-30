@@ -11,9 +11,10 @@ module FileFetch
 
   def fetch_filepath(filename)
 
-    lib = File.dirname(__FILE__)    
-    File.join(lib,'..','stylesheet',filename)
-
+    #lib = File.dirname(__FILE__)    
+    #File.join(lib,'..','stylesheet',filename)
+    lib = 'http://a0.jamesrobertson.me.uk/rorb/r/ruby/wikisys/stylesheet'
+    File.join(lib, filename)
   end  
   
   def fetch_file(filename)
@@ -327,6 +328,8 @@ module Wikisys
       dir = DirToXML.new(filepath, index: 'dir.json', debug: @debug)
       h = dir.activity
       puts 'h: ' + h.inspect if @debug
+      
+      return if (h[:new] + h[:modified]).empty?
       
       pg = Wiki.new @filepath, entries: @entries, debug: @debug
                     
