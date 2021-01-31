@@ -104,16 +104,24 @@ module Wikisys
     
     def modify_build(filename)
       
+      puts 'inside modify_buld' if @debug
+      
       @title, @content, @tags = read_md(filename)
       
       # find the entry
       # modify the tags if necessary
+      puts '@title: ' + @title.inspect if @debug
+      puts '_ @content: ' + @content.inspect if @debug
       
       r = @entries.find_by_title @title
       puts 'r: ' + r.inspect if @debug
-      return unless r
       
-      write_xml(@title, build_xml(@title, @content, @tags))
+      if r.nil? then
+        r = @entries.create title: @title, tags: @tags.join(' ')
+      end
+      
+      xmlfile = filename.sub(/\.md$/,'.xml')
+      write_xml(xmlfile, build_xml(@title, @content, @tags))
       
       r.tags = @tags.join(' ') if r.tags != @tags
       
@@ -156,15 +164,18 @@ module Wikisys
     def read_md(filename)
       
       filepath = File.join(@filepath, 'md', filename)
+      puts 'filepath : ' + filepath.inspect if @debug
       return unless File.exists? filepath
       
-      s = read_file(filepath).strip
+      s = read_file(filepath).strip.gsub(/\r/,'')
+      puts 's: ' + s.inspect if @debug
       
       # read the title
       title = s.lines.first.chomp.sub(/^# +/,'')
       
       # read the hashtags if there is any
       tagsline = s.lines.last[/^ *\+ +(.*)/,1]
+      puts 'tagsline: ' + tagsline.inspect if @debug
       
       if tagsline then
         
@@ -172,13 +183,13 @@ module Wikisys
       
       else
         
-        [title, s.lines[1..--1].join, []]
+        [title, s.lines[1..-1].join, []]
         
       end
       
     end   
     
-    def build_xml(title, content, tags)
+    def build_xml(title, content, rawtags)
       
       puts 'content: ' + content.inspect if @debug
       s = content.gsub(/\[\[[^\]]+\]\]/) do |raw_link|
@@ -207,7 +218,7 @@ module Wikisys
       
       heading = "<heading>%s</heading>" % title
       
-      if tags.any? then
+      if rawtags.any? then
       
         list = tags.map {|tag| "    <tag>%s</tag>" % tag}
         tags = "<tags>\n%s\n  </tags>" % list.join("\n")
@@ -218,11 +229,12 @@ module Wikisys
       else
         
         body = "<body>%s</body>" % Martile.new(s.lines[1..-1].join.strip).to_html
+        tags = ''
 
       end
             
       "<article id='%s'>\n  %s\n  %s\n  %s\n</article>" % \
-          [title.downcase.gsub(/ +/,'-'), heading, body, tags]
+          [title.gsub(/ +/,'-'), heading, body, tags]
       
       
     end
@@ -237,10 +249,10 @@ module Wikisys
       
     end    
     
-    def write_xml(title, content)
+    def write_xml(s, content)
       
-      filepath = File.join(File.absolute_path(@filepath), 'xml', 
-                           title.downcase.gsub(/ +/,'_') + '.xml')
+      filename = s =~ /\.xml$/ ? s :  s.gsub(/ +/,'_') + '.xml'
+      filepath = File.join(File.absolute_path(@filepath), 'xml', filename)
       FileUtils.mkdir_p File.dirname(filepath)      
       #File.write filepath, content
       write_file filepath, content
@@ -276,8 +288,9 @@ module Wikisys
     
     def write_md(title, content)
       
-      filepath = File.join(File.absolute_path(@filepath), 'md', 
-                           title.gsub(/ +/,'_') + '.md')
+      puts 'inside write_md' if @debug
+      filename = s =~ /\.md$/ ? s :  s.gsub(/ +/,'_') + '.md'
+      filepath = File.join(File.absolute_path(@filepath), 'md', filename)
       FileUtils.mkdir_p File.dirname(filepath)      
       File.write filepath, content
       
@@ -312,9 +325,25 @@ module Wikisys
         @mw.filepath = mindwords_file
       end
       
-      scan_md_files()
+      @pg = Wiki.new @filepath, entries: @entries, debug: @debug
+      
+      #scan_md_files()
       
     end
+    
+    def new_pg(filename)
+      
+      @pg.new_build(filename)
+      update_mw(@pg.title, @pg.tags)
+      
+    end
+    
+    def update_pg(filename)
+      
+      @pg.modify_build(filename)
+      update_mw(@pg.title, @pg.tags)
+      
+    end    
     
     private        
 
@@ -331,22 +360,8 @@ module Wikisys
       
       return if (h[:new] + h[:modified]).empty?
       
-      pg = Wiki.new @filepath, entries: @entries, debug: @debug
-                    
-      
-      h[:new].each do |filename|
-
-        pg.new_build(filename)
-        update_mw(pg.title, pg.tags)
-        
-      end
-      
-      h[:modified].each do |filename|
-        
-        pg.modify_build(filename)
-        update_mw(pg.title, pg.tags)
-                
-      end
+      h[:new].each {|filename| new_pg(filename) }
+      h[:modified].each {|filename| update_pg(filename) }
 
       @mw.save if @mw.lines.any?      
       outline_filepath = File.join(@filepath, 'myoutline.txt')
@@ -365,7 +380,7 @@ module Wikisys
         if found then
         
           links = found.breadcrumb.map do |x| 
-            [x, x.downcase.gsub(/ +/,'-') + '.html']
+            [x, x.gsub(/ +/,'-') + '.html']
           end
                     
           pg.create_breadcrumb(filepath, links)
@@ -430,6 +445,7 @@ module Wikisys
       end                            
       
     end
+
     
     def view_file(file='index.html')
       @hc.read(file) { File.read(file) }
