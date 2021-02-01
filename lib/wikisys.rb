@@ -28,11 +28,24 @@ module FileFetch
   end
 end
 
+module StringCase
+  
+  refine String do
+    
+    def capitalize2()
+      self.sub(/^[a-z]/) {|x| x.upcase }
+    end
+    
+  end
+  
+end
+
 module Wikisys
 
   class Wiki    
     include FileFetch
     using ColouredText
+    using StringCase
     
     attr_accessor :title, :content, :tags
     attr_reader :to_xml
@@ -201,13 +214,13 @@ module Wikisys
         
         if r then
           
-          e.attributes[:title] = title.capitalize
+          e.attributes[:title] = title.capitalize2
           
         else
           
-          make_page(title.capitalize)
+          make_page(title.capitalize2)
           e.attributes[:class] = 'new'
-          e.attributes[:title] = title.capitalize + ' (page does not exist)'
+          e.attributes[:title] = title.capitalize2 + ' (page does not exist)'
           
         end
                 
@@ -334,19 +347,51 @@ module Wikisys
     def new_pg(filename)
       
       @pg.new_build(filename)
+      @entries.save
+      
       update_mw(@pg.title, @pg.tags)
+      @mw.save if @mw.lines.any?        
+      
+      build_html(filename)
       
     end
     
     def update_pg(filename)
       
       @pg.modify_build(filename)
+      @entries.save
+      
       update_mw(@pg.title, @pg.tags)
+      @mw.save if @mw.lines.any?        
+      
+      build_html(filename)
       
     end    
     
     private        
 
+    def build_html(filename)
+      
+      xml_file = filename.sub(/\.md$/,'.xml')
+      filepath = File.join(@filepath, 'xml', xml_file)
+      s = @pg.read_file filepath
+      title = Rexle.new(s).root.text('heading')
+      puts 'about to search title: ' + title.inspect if @debug
+      found = @mw.search(title)
+
+      if found then
+
+        links = found.breadcrumb.map do |x|
+          [x, x.gsub(/ +/,'-') + '.html']
+        end
+
+        @pg.create_breadcrumb(filepath, links)
+
+      end
+      
+      @pg.write_html xml_file
+      
+    end
     
     # Check if any of the md files have been modified or newly created
     #
@@ -370,24 +415,7 @@ module Wikisys
       
       (h[:new] + h[:modified]).each do |filename|
         
-        xml_file = filename.sub(/\.md$/,'.xml')
-        filepath = File.join(@filepath, 'xml', xml_file)
-        s = pg.read_file filepath
-        title = Rexle.new(s).root.text('heading')
-        puts 'about to search title: ' + title.inspect if @debug
-        found = @mw.search(title)
-        
-        if found then
-        
-          links = found.breadcrumb.map do |x| 
-            [x, x.gsub(/ +/,'-') + '.html']
-          end
-                    
-          pg.create_breadcrumb(filepath, links)
-          
-        end
-        
-        pg.write_html xml_file
+        build_html filename
         
       end
       
