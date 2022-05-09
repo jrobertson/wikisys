@@ -31,21 +31,21 @@ module FileFetch
 end
 
 module StringCase
-  
+
   refine String do
-    
+
     def capitalize2()
       self.sub(/^[a-z]/) {|x| x.upcase }
     end
-    
+
   end
-  
+
 end
 
 module Wikisys
 
   class Wiki
-    include RXFReadWrite
+    include RXFReadWriteModule
     include FileFetch
     using ColouredText
     using StringCase
@@ -133,17 +133,17 @@ module Wikisys
       r = @entries.find_by_title @title
       puts 'r: ' + r.inspect if @debug
 
-      if r.nil? then
+      if r.nil? and @tags then
         r = @entries.create title: @title, tags: @tags.join(' ')
       end
 
 
-      filename = File.basename(filepath.sub(/\.md$/,'.xml'))
+      filename = File.basename(@filepath.sub(/\.md$/,'.xml'))
       xmlfile = File.join(@filepath, 'xml', filename)
 
       write_xml(xmlfile, make_xml(@title, @content, @tags))
 
-      r.tags = @tags.join(' ') if r.tags != @tags
+      r.tags = @tags.join(' ') if r and r.tags != @tags
 
     end
 
@@ -225,6 +225,8 @@ module Wikisys
     end
 
     def make_xml(title, content, rawtags)
+
+      return unless content
 
       puts 'content: ' + content.inspect if @debug
       s = content.gsub(/\[\[[^\]]+\]\]/) do |raw_link|
@@ -308,7 +310,7 @@ module Wikisys
       write_md title, s
       write_xml title, build_xml(s)
 
-      @entries.create title: title, tags: tags
+      @entries.create({title: title, tags: tags})
       @title, @content, @tags = title, '', tags
 
       return s
@@ -322,8 +324,12 @@ module Wikisys
 
     end
 
-    def write_md_to_be_deleted(title, content)
+    # apparently this method was to be deleted, but it's still being
+    # used so will therefore remain for now
+    #
+    def write_md(title, content)
 
+      s = title
       puts 'inside write_md' if @debug
       filename = s =~ /\.md$/ ? s :  s.gsub(/ +/,'_') + '.md'
       filepath = File.join(File.absolute_path(@filepath), 'md', filename)
